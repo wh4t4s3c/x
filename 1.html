@@ -1,0 +1,8 @@
+<link rel="stylesheet" href="b.css">
+<style>:root {--script: alert(2);}</style>
+
+<script>
+	new Function(getComputedStyle(document.documentElement).getPropertyValue('--script'))();
+</script>
+
+<a href="#empty" onmouseover="new Function(getComputedStyle(document.documentElement).getPropertyValue('--script'))();">Here</a>
