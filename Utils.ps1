@@ -1,19 +1,26 @@
-function Zip-String ($inputString){
-	$input = $inputString.ToCharArray();
-	$ms = New-Object IO.MemoryStream;
-	$cs = New-Object System.IO.Compression.GZipStream ($ms, [Io.Compression.CompressionMode]"Compress");
-	$cs.Write($input, 0, $input.Length);
-	$cs.Close();
-	[Convert]::ToBase64String($ms.ToArray());
-	$ms.Close()
+## ZIP / UNZIP
+
+function Zip-String {
+[CmdletBinding()]
+    Param (
+		[Parameter(ValueFromPipeline)][String] $inputString
+    )
+	Process {
+		$input = $inputString.ToCharArray();
+		$ms = New-Object IO.MemoryStream;
+		$cs = New-Object System.IO.Compression.GZipStream ($ms, [Io.Compression.CompressionMode]"Compress");
+		$cs.Write($input, 0, $input.Length);
+		$cs.Close();
+		[Convert]::ToBase64String($ms.ToArray());
+		$ms.Close()
+	}
 }
 
 function Unzip-String {
+[CmdletBinding()]
     param(
-		[Parameter(ValueFromPipelineByPropertyName=$true,ValueFromPipeline=$true)]
-		[string]$compString
+		[Parameter(ValueFromPipeline)][String] $compString
     )   
-       
     process {
 		$comp = [System.Convert]::FromBase64String($compString)
         
@@ -30,110 +37,147 @@ function Unzip-String {
 Set-Alias zs Zip-String
 Set-Alias us Unzip-String
 
-function Save-Secret() {
+## Base64
+
+function Base64-to-String {
+[CmdletBinding()]
     param(
-		[string]$secretFile
+		[Parameter(ValueFromPipeline)][String] $base64
     )   
-	if( (Test-Path "$home\.secret") -eq $false) {
-		[void](new-Item "$home\.secret" -ItemType Directory)
+    process {
+		$base = [System.Convert]::fromBase64String($base64)
+		[System.Text.Encoding]::UTF8.GetString($base)
 	}
-	Read-Host -AsSecureString  "Enter password " | convertfrom-securestring | out-file $home"\.secret\$secretFile"
 }
 
-function Restore-Secret() {
+function String-to-Base64 {
+[CmdletBinding()]
     param(
-		[string]$secretFile
+		[Parameter(ValueFromPipeline)][String] $plaintext
     )   
-	$sp = Get-Content $home"\.secret\$secretFile" | ConvertTo-SecureString
-	$up = (New-Object PSCredential "user",$sp).GetNetworkCredential().Password
-	$up
+    process {
+		$base = [System.Text.Encoding]::UTF8.GetBytes($plaintext)
+		[System.Convert]::toBase64String($base)
+	}
 }
 
-Set-Alias ss Save-Secret
-Set-Alias rs Restore-Secret
+Set-Alias b2s Base64-to-String
+Set-Alias s2b String-to-Base64
 
-function B64-UTF-From() {
+## base64 unicode
+
+function Base64-to-String-Unicode {
+[CmdletBinding()]
     param(
-		[string]$base64
+		[Parameter(ValueFromPipeline)][String] $base64
     )   
-	[System.Text.Encoding]::UTF8.GetString([System.Convert]::fromBase64String($base64))
+    process {
+		$base = [System.Convert]::fromBase64String($base64)
+		[System.Text.Encoding]::Unicode.GetString($base)
+	}
 }
 
-function B64-From() {
+function String-to-Base64-Unicode {
+[CmdletBinding()]
     param(
-		[string]$base64
+		[Parameter(ValueFromPipeline)][String] $plaintext
     )   
-	[System.Text.Encoding]::Unicode.GetString([System.Convert]::fromBase64String($base64))
+    process {
+		$base = [System.Text.Encoding]::Unicode.GetBytes($plaintext)
+		[System.Convert]::toBase64String($base)
+	}
 }
 
-function B64-UTF-To() {
+Set-Alias b2su Base64-to-String-Unicode
+Set-Alias s2bu String-to-Base64-Unicode
+
+## command to hex striong
+
+function Command-to-Hex {
+[CmdletBinding()]
     param(
-		[string]$plaintext
+		[Parameter(ValueFromPipeline)][String] $command
     )   
-	[System.Convert]::toBase64String([System.Text.Encoding]::UTF8.GetBytes($plaintext))
+    process {
+		$output = (iex "$command"|out-string|format-hex)
+		$c=""
+		ForEach($byte in $output.bytes){
+			$c += "{0:x2}" -f $byte
+		}
+		$c.tostring()
+	}
 }
 
-function B64-To() {
+function String-to-Hex {
+[CmdletBinding()]
     param(
-		[string]$plaintext
+		[Parameter(ValueFromPipeline)][String] $output
     )   
-	[System.Convert]::toBase64String([System.Text.Encoding]::Unicode.GetBytes($plaintext))
+    process {
+		$c="";
+		ForEach($byte in ($output|format-hex).bytes){
+			$c += "{0:x2}" -f $byte
+		}
+		$c.tostring()
+	}
 }
 
-Set-Alias but B64-UTF-To
-Set-Alias buf B64-UTF-From
-Set-Alias bt B64-To
-Set-Alias bf B64-From
-
-function Hex-Command-To() {
+function Hex-to-String {
+[CmdletBinding()]
     param(
-		[string]$command
+		[Parameter(ValueFromPipeline)][String] $hexString
     )   
-	$c="";ForEach($byte in (iex "$command"|out-string|format-hex).bytes){$c+="{0:x2}" -f $byte};$c=$c.tostring();
-	$c
+    process {
+		$d = [byte[]]::new($hexString.Length / 2);
+		For($i = 0; $i -lt $hexString.Length; $i += 2){
+			$d[$i/2] = [convert]::ToByte($hexString.Substring($i, 2), 16)
+		}
+		[System.Text.Encoding]::UTF8.GetString($d)
+	}
 }
 
-function Hex-Command-From() {
-    param(
-		[string]$input
-    )   
- 
-	$d=[byte[]]::new($input.Length / 2);For($i=0;$i -lt $input.Length; $i+=2){$d[$i/2] = [convert]::ToByte($input.Substring($i, 2), 16)};[System.Text.Encoding]::UTF8.GetString($d)
+Set-Alias c2h Command-to-Hex
+Set-Alias s2h String-to-Hex
+Set-Alias h2s Hex-to-String
+
+## secrets
+
+function encode($plaintext, $key) {
+	$cyphertext = ""
+	$keyposition = 0
+	$KeyArray = $key.ToCharArray()
+	$plaintext.ToCharArray() | foreach-object -process {
+		$cyphertext += [char]([byte][char]$_ -bxor $KeyArray[$keyposition])
+		$keyposition += 1
+		if ($keyposition -eq $key.Length) {$keyposition = 0}
+	}
+	return $cyphertext
 }
 
-Set-Alias hct Hex-Command-To
-Set-Alias hcf Hex-Command-From
-
-function Hex-To() {
-    param(
-		[string]$command
-    )   
-	$c="";ForEach($byte in ($command|format-hex).bytes){$c+="{0:x2}" -f $byte};$c=$c.tostring();$c
+function getPlaintext($creds) {
+	$creds = New-Object System.Management.Automation.PSCredential ("anonym", $creds)
+	return $creds.GetNetworkCredential().Password
 }
 
-function Hex-Command-To() {
-    param(
-		[string]$command
-    )   
-	$c="";ForEach($byte in (iex "$command"|out-string|format-hex).bytes){$c+="{0:x2}" -f $byte};$c=$c.tostring();
-	$c
-}
+function Get-Secret($file) {
+	write-host "Processing $file credentials"
+	$file = "$home\.secret\$file"
 
-function Hex-From() {
-    param(
-		[Parameter(ValueFromPipelineByPropertyName=$true,ValueFromPipeline=$true)]
-		[string]$hexString
-    )   
- 
-	$d=[byte[]]::new($hexString.Length / 2);
+	if( (Test-Path "$home\.secret") -eq $false ) {
+		[void](New-Item "$home\.secret" -ItemType Directory)
+	}
+
+	$key = getPlaintext (Read-Host -AsSecureString  "Enter unlock key ")
+
+	if( ((Test-Path $file) -eq $false) ) {
+		$user = Read-Host "Enter Access Key ID "
+		$password = Read-Host -AsSecureString  "Enter Secret Key "
+		$newPass = encode (getPlaintext $password) $key | ConvertTo-SecureString -AsPlainText -Force
+		New-Object System.Management.Automation.PSCredential ($user, $newPass) | Export-CliXml -Path $file
+	}
 	
-	For($i=0;$i -lt $hexString.Length; $i+=2){
-		$d[$i/2] = [convert]::ToByte($hexString.Substring($i, 2), 16)
-	};
-	
-	[System.Text.Encoding]::UTF8.GetString($d)
+	$temp = Import-CliXml -Path  $file
+	return New-Object System.Management.Automation.PSCredential ($temp.UserName, (encode $temp.GetNetworkCredential().Password $key | ConvertTo-SecureString -AsPlainText -Force))
 }
 
-Set-Alias ht Hex-To
-Set-Alias hct Hex-Command-To
-Set-Alias hf Hex-From
+Set-Alias gs Get-Secret
