@@ -1,16 +1,23 @@
 function fixLength($key) {
-	$size = 8 - ($key.length % 8)
-	
-	for($i = 0; $i -lt $size; $i ++) {
-		$key += $key[$i]
+	if($key.length -gt 32) {
+		write-host "Pin cannot be longer than 32. Truncating"
+		$key = $key.substring(0,32)
 	}
-	
+	if($key.length % 8 -ne 0) {
+		$size = 8 - ($key.length % 8)
+		
+		for($i = 0; $i -lt $size; $i ++) {
+			$key += $key[$i]
+		}
+	}
 	return $key
 }
 
 function getPin($msg) {
 	$key = Read-Host $msg -AsSecureString
+	# need plaint text to make sure the length is correct
 	$key = (New-Object System.Management.Automation.PSCredential("empty", $key)).GetNetworkCredential().Password;
+	# a key must be multiple of 8
 	$key = fixLength($key)
 	return ConvertTo-SecureString $key -AsPlainText -Force
 }
