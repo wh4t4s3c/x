@@ -13,30 +13,21 @@ function fixLength($key) {
 	return $key
 }
 
+function makeKey($password) {
+	$iterations = 5000
+	$salt = @(139, 220, 45, 127, 147, 146, 120, 4, 198, 164, 170, 246, 212, 138, 134, 112, 74, 204, 210, 137, 231, 228, 121, 190, 169, 92, 116, 6, 165, 70, 251, 21)
+	$saltBytes = [Text.Encoding]::Unicode.GetBytes($salt) 
+	$deriveBytes = new-Object Security.Cryptography.Rfc2898DeriveBytes($password, $saltBytes, $iterations)
+	return $deriveBytes.GetBytes(32) 
+}
+
 function getPin($msg) {
 	$key = Read-Host $msg -AsSecureString
 	# need plaint text to make sure the length is correct
 	$key = (New-Object System.Management.Automation.PSCredential("empty", $key)).GetNetworkCredential().Password;
 	# a key must be multiple of 8
-	$key = fixLength($key)
-	return ConvertTo-SecureString $key -AsPlainText -Force
-}
-
-function encode($plaintext, $key) {
-	$cyphertext = ""
-	$keyposition = 0
-	$KeyArray = $key.ToCharArray()
-	$plaintext.ToCharArray() | foreach-object -process {
-		$cyphertext += [char]([byte][char]$_ -bxor $KeyArray[$keyposition])
-		$keyposition += 1
-		if ($keyposition -eq $key.Length) {$keyposition = 0}
-	}
-	return $cyphertext
-}
-
-function getPlaintext($creds) {
-	$creds = New-Object System.Management.Automation.PSCredential ("anonym", $creds)
-	return $creds.GetNetworkCredential().Password
+	$key = fixLength $key
+	return makeKey $key
 }
 
 function convert-secrets($file) {
@@ -48,11 +39,11 @@ function convert-secrets($file) {
 		return
 	}
 
-	$key = getPlaintext (Read-Host -AsSecureString  "Enter current unlock key ")
+	$key = getPin("Enter current unlock key")
 	$temp = Import-CliXml -Path  $file
-	$password = (encode $temp.GetNetworkCredential().Password $key) | ConvertTo-SecureString -AsPlainText -Force
-	$key = getPin("Enter new unlock key")
-	$newPass = ConvertFrom-SecureString $password -SecureKey $pin | ConvertTo-SecureString -AsPlainText -Force
+	$password = ConvertTo-SecureString $temp.GetNetworkCredential().password -Key $key
+	$pin = getPin("Enter new unlock key")
+	$newPass = ConvertFrom-SecureString $password -Key $pin | ConvertTo-SecureString -AsPlainText -Force
 
 	New-Object System.Management.Automation.PSCredential ($temp.UserName, $newPass) | Export-CliXml -Path $file
 }
@@ -70,13 +61,13 @@ function getCredentials($file) {
 	if( ((Test-Path $file) -eq $false) ) {
 		$user = Read-Host "Enter Access Key ID "
 		$password = Read-Host -AsSecureString  "Enter Secret Key "
-		$newPass = ConvertFrom-SecureString $password -SecureKey $key | ConvertTo-SecureString -AsPlainText -Force
+		$newPass = ConvertFrom-SecureString $password -Key $key | ConvertTo-SecureString -AsPlainText -Force
 		New-Object System.Management.Automation.PSCredential ($user, $newPass) | Export-CliXml -Path $file
 	}
 	
 	$temp = Import-CliXml -Path  $file
 
-	$secureString = ConvertTo-SecureString $temp.GetNetworkCredential().password -SecureKey $key
+	$secureString = ConvertTo-SecureString $temp.GetNetworkCredential().password -Key $key
 
 	return New-Object System.Management.Automation.PSCredential ($temp.UserName, $secureString)
 }
