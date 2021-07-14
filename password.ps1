@@ -1,19 +1,8 @@
-function fixLength($key) {
-	if($key.length -gt 32) {
-		write-host "Pin cannot be longer than 32. Truncating"
-		$key = $key.substring(0,32)
-	}
-	if($key.length % 8 -ne 0) {
-		$size = 8 - ($key.length % 8)
-		
-		for($i = 0; $i -lt $size; $i ++) {
-			$key += $key[$i]
-		}
-	}
-	return $key
-}
+function getPin($msg) {
+	$password = Read-Host $msg -AsSecureString
+	# need plaint text to make sure the length is correct
+	$password = (New-Object System.Management.Automation.PSCredential("empty", $password)).GetNetworkCredential().Password;
 
-function makeKey($password) {
 	$iterations = 5000
 	$salt = @(139, 220, 45, 127, 147, 146, 120, 4, 198, 164, 170, 246, 212, 138, 134, 112, 74, 204, 210, 137, 231, 228, 121, 190, 169, 92, 116, 6, 165, 70, 251, 21)
 	$saltBytes = [Text.Encoding]::Unicode.GetBytes($salt) 
@@ -21,16 +10,7 @@ function makeKey($password) {
 	return $deriveBytes.GetBytes(32) 
 }
 
-function getPin($msg) {
-	$key = Read-Host $msg -AsSecureString
-	# need plaint text to make sure the length is correct
-	$key = (New-Object System.Management.Automation.PSCredential("empty", $key)).GetNetworkCredential().Password;
-	# a key must be multiple of 8
-	$key = fixLength $key
-	return makeKey $key
-}
-
-function convert-secrets($file) {
+function rekey-secret($file) {
 	write-host "Processing $file credentials"
 	$file = "$home\.secret\$file"
 
@@ -47,7 +27,22 @@ function convert-secrets($file) {
 
 	New-Object System.Management.Automation.PSCredential ($temp.UserName, $newPass) | Export-CliXml -Path $file
 }
-	
+
+function rekey-allsecrets {
+	$a=(get-item $home/.secret/*).name
+	$key = getPin("Enter current unlock key")
+	$pin = getPin("Enter new unlock key")
+
+	$a | foreach {
+		write-host "Processing $_ credentials"
+		$file = "$home\.secret\$_"
+		$temp = Import-CliXml -Path  $file
+		$password = ConvertTo-SecureString $temp.GetNetworkCredential().password -Key $key
+		$newPass = ConvertFrom-SecureString $password -Key $pin | ConvertTo-SecureString -AsPlainText -Force
+		New-Object System.Management.Automation.PSCredential ($temp.UserName, $newPass) | Export-CliXml -Path $file
+	}
+}
+
 function getCredentials($file) {
 	write-host "Processing $file credentials"
 	$file = "$home\.secret\$file"
