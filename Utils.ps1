@@ -142,21 +142,16 @@ Set-Alias h2s Hex-to-String
 
 ## secrets
 
-function encode($plaintext, $key) {
-	$cyphertext = ""
-	$keyposition = 0
-	$KeyArray = $key.ToCharArray()
-	$plaintext.ToCharArray() | foreach-object -process {
-		$cyphertext += [char]([byte][char]$_ -bxor $KeyArray[$keyposition])
-		$keyposition += 1
-		if ($keyposition -eq $key.Length) {$keyposition = 0}
-	}
-	return $cyphertext
-}
+function getPin($msg) {
+	$password = Read-Host $msg -AsSecureString
+	# need plaint text to make sure the length is correct
+	$password = (New-Object System.Management.Automation.PSCredential("empty", $password)).GetNetworkCredential().Password;
 
-function getPlaintext($creds) {
-	$creds = New-Object System.Management.Automation.PSCredential ("anonym", $creds)
-	return $creds.GetNetworkCredential().Password
+	$iterations = 5000
+	$salt = @(139, 220, 45, 127, 147, 146, 120, 4, 198, 164, 170, 246, 212, 138, 134, 112, 74, 204, 210, 137, 231, 228, 121, 190, 169, 92, 116, 6, 165, 70, 251, 21)
+	$saltBytes = [Text.Encoding]::Unicode.GetBytes($salt) 
+	$deriveBytes = new-Object Security.Cryptography.Rfc2898DeriveBytes($password, $saltBytes, $iterations)
+	return $deriveBytes.GetBytes(32) 
 }
 
 function Get-Secret($file) {
@@ -167,17 +162,20 @@ function Get-Secret($file) {
 		[void](New-Item "$home\.secret" -ItemType Directory)
 	}
 
-	$key = getPlaintext (Read-Host -AsSecureString  "Enter unlock key ")
+	$key = getPin("Enter unlock key")
 
 	if( ((Test-Path $file) -eq $false) ) {
 		$user = Read-Host "Enter Access Key ID "
 		$password = Read-Host -AsSecureString  "Enter Secret Key "
-		$newPass = encode (getPlaintext $password) $key | ConvertTo-SecureString -AsPlainText -Force
+		$newPass = ConvertFrom-SecureString $password -Key $key | ConvertTo-SecureString -AsPlainText -Force
 		New-Object System.Management.Automation.PSCredential ($user, $newPass) | Export-CliXml -Path $file
 	}
 	
 	$temp = Import-CliXml -Path  $file
-	return New-Object System.Management.Automation.PSCredential ($temp.UserName, (encode $temp.GetNetworkCredential().Password $key | ConvertTo-SecureString -AsPlainText -Force))
+
+	$secureString = ConvertTo-SecureString $temp.GetNetworkCredential().password -Key $key
+
+	return New-Object System.Management.Automation.PSCredential ($temp.UserName, $secureString)
 }
 
 Set-Alias gs Get-Secret
