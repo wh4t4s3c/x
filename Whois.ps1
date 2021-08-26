@@ -51,7 +51,7 @@ $properties = "domainName",
 	#"estimatedDomainAge",
 	#@{N = "registrant"; e = { $_.registrant.rawtext } },
  
-$whoIsInfo = $responses.WhoisRecord | Select-Object -Property $properties | sort-object {[int]($_.left -replace '(\d+).*', '$1')}
+$whoIsInfo = $responses.WhoisRecord | Select-Object -Property $properties | sort-object {[int]($_."days left" -replace '(\d+).*', '$1')}
  
 $whoIsInfo | Export-Csv -NoTypeInformation domain-whois.csv
  
